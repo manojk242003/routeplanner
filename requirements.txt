@@ -1,0 +1,27 @@
+# Core scientific stack
+numpy==2.2.6
+scipy==1.15.2
+pandas==2.2.3
+matplotlib==3.10.0
+scikit-learn==1.7.2
+networkx==3.4.2
+tqdm==4.67.1
+
+# Geospatial stack (Windows wheels available)
+shapely==2.0.6
+pyproj==3.7.0
+fiona==1.9.6
+rasterio==1.3.10
+geopandas==0.14.4
+pyogrio==0.9.0
+cartopy==0.23.0
+folium==0.16.0
+
+# Supporting libraries
+requests==2.32.3
+joblib==1.4.2
+click==8.1.7
+six==1.16.0
+python-dateutil==2.9.0.post0
+pytz==2024.2
+xarray==2024.11.0

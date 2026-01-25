@@ -1,0 +1,87 @@
+# ======================
+# Python cache / bytecode
+# ======================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# ======================
+# Virtual environments
+# ======================
+env/
+venv/
+.venv/
+conda/
+miniconda/
+anaconda/
+.env
+
+# ======================
+# Jupyter / IPython
+# ======================
+.ipynb_checkpoints/
+profile_default/
+
+# ======================
+# OS / Editor files
+# ======================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# ======================
+# Data files (large / generated)
+# ======================
+*.pkl
+*.pickle
+*.nc
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+
+# ======================
+# Generated outputs
+# ======================
+route.json
+route_map.html
+*.log
+
+# ======================
+# Downloads / cache
+# ======================
+data/
+cache/
+weather_cache.pkl
+
+# ======================
+# Testing / temp
+# ======================
+tmp/
+temp/
+output/
+
+# ======================
+# Packaging
+# ======================
+build/
+dist/
+*.egg-info/
+
+# ======================
+# Coverage / profiling
+# ======================
+.coverage
+htmlcov/
+.prof
+
+# ======================
+# Secrets / keys (just in case)
+# ======================
+*.key
+*.pem
+*.secret
