@@ -11,25 +11,21 @@ def visualize_route(
     output_html="route_map.html",
     open_browser=True,
 ):
-    """
-    Visualize maritime route with optional canal jumps.
-    """
-
-    # ================= LOAD ROUTE =================
+    # ================= LOAD DATA =================
     with open(route_json_path, "r") as f:
         data = json.load(f)
 
-    route = data.get("route_smooth") or data.get("route")
-    start = data["start"]
-    goal = data["goal"]
+    # FORCE full route usage (NO fallback)
+    route = data["route_smooth"]
+    route = [(float(lat), float(lon)) for lat, lon in route]
+
+    start = tuple(data["start"])
+    goal = tuple(data["goal"])
     canal_jumps = data.get("canal_jumps", [])
 
-    # ================= CREATE MAP =================
-    center_lat = (start[0] + goal[0]) / 2
-    center_lon = (start[1] + goal[1]) / 2
-
+    # ================= MAP INIT =================
     m = folium.Map(
-        location=[center_lat, center_lon],
+        location=route[0],
         zoom_start=4,
         tiles="OpenStreetMap",
         control_scale=True,
@@ -40,14 +36,14 @@ def visualize_route(
         route,
         color="blue",
         weight=4,
-        opacity=0.8,
+        opacity=0.85,
         tooltip="Maritime Route",
     ).add_to(m)
 
     # ================= CANAL JUMPS =================
     for jump in canal_jumps:
-        p_from = jump["from"]
-        p_to = jump["to"]
+        p_from = tuple(jump["from"])
+        p_to = tuple(jump["to"])
         canal = jump["canal"].upper()
         penalty = jump["penalty_hours"]
 
@@ -92,8 +88,8 @@ def visualize_route(
     # ================= FIT BOUNDS =================
     all_points = route[:]
     for jump in canal_jumps:
-        all_points.append(jump["from"])
-        all_points.append(jump["to"])
+        all_points.append(tuple(jump["from"]))
+        all_points.append(tuple(jump["to"]))
 
     m.fit_bounds(all_points)
 
