@@ -46,10 +46,10 @@ from tqdm import tqdm
 
 # ================= CONFIG =================
 GRID_RESOLUTION = 0.25
-VESSEL_DRAFT = 8.0
+VESSEL_DRAFT = 15
 
-LAT_MIN, LAT_MAX = -56.0, 83.0
-LON_MIN, LON_MAX = -168.0, -34.0
+LAT_MIN, LAT_MAX = -80.0, 80.0
+LON_MIN, LON_MAX = -180.0, 180.0
 # =========================================
 
 land_mask = None
@@ -98,7 +98,7 @@ def main():
         pool.join()
         print("[INFO] Workers terminated.")
 
-    with open("valid_nodes.pkl", "wb") as f:
+    with open("valid_nodes_suez.pkl", "wb") as f:
         pickle.dump(VALID_NODES, f)
 
     print(f"[OK] Precomputed {len(VALID_NODES)} valid nodes")

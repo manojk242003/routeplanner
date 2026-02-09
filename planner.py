@@ -11,7 +11,7 @@ from weather import WeatherField, SpeedModel
 
 # ================= LOAD PRECOMPUTED GRID =================
 
-with open("valid_nodes.pkl", "rb") as f:
+with open("valid_nodes_world.pkl", "rb") as f:
     VALID_NODES_LIST = pickle.load(f)
 
 VALID_NODES = set(VALID_NODES_LIST)
@@ -22,18 +22,17 @@ speed_model = SpeedModel()
 
 
 # ================= CANAL REGISTRY =================
-# Each canal is a bidirectional graph bridge
 
 CANALS = {
     "panama": {
         "pacific":  (8.95, -79.55),
         "atlantic": (9.35, -79.90),
-        "penalty_hours": 10.0,   # average Panama transit
+        "penalty_hours": 10.0,
     },
     "suez": {
         "south": (29.90, 32.55),   # Red Sea
         "north": (31.25, 32.35),   # Mediterranean
-        "penalty_hours": 12.0,     # average Suez transit
+        "penalty_hours": 12.0,
     }
 }
 
@@ -61,6 +60,23 @@ def is_mediterranean(coord):
     return 30.0 <= coord[0] <= 46.0 and -6.0 <= coord[1] <= 36.0
 
 
+# ======== BASIN HELPERS (ADDED) ========
+
+def is_indian_indopacific(coord):
+    lat, lon = coord
+    return (
+        40.0 <= lon <= 130.0 and
+        -40.0 <= lat <= 35.0
+    )
+
+def is_europe_mediterranean(coord):
+    lat, lon = coord
+    return (
+        -10.0 <= lon <= 40.0 and
+        30.0 <= lat <= 70.0
+    )
+
+
 # ================= HELPERS =================
 
 def snap_to_valid_node(point):
@@ -69,7 +85,6 @@ def snap_to_valid_node(point):
         VALID_NODES,
         key=lambda v: (v[0] - lat) ** 2 + (v[1] - lon) ** 2
     )
-
 
 def make_ocean_neighbors():
     def ocean_neighbors(node):
@@ -152,7 +167,6 @@ def compute_route(start, goal, smooth=True):
     print("[INFO] Snapped goal :", goal)
 
     neighbors = make_ocean_neighbors()
-
     canal_jumps = []
     raw_path = []
 
@@ -170,13 +184,20 @@ def compute_route(start, goal, smooth=True):
         raw_path = p1 + [jump["from"], jump["to"]] + p2
         canal_jumps.append(jump)
 
-    # ---------- SUEZ ----------
+    # ---------- SUEZ (FIXED) ----------
     elif (
-        in_afro_eurasia(start) and in_afro_eurasia(goal) and
-        ((is_red_sea(start) and is_mediterranean(goal)) or
-         (is_mediterranean(start) and is_red_sea(goal)))
+        # Indo-Pacific (India / China / SE Asia) ↔ Europe
+        (is_indian_indopacific(start) and is_europe_mediterranean(goal)) or
+        (is_europe_mediterranean(start) and is_indian_indopacific(goal)) or
+
+        # Local Red Sea ↔ Mediterranean
+        (
+            in_afro_eurasia(start) and in_afro_eurasia(goal) and
+            ((is_red_sea(start) and is_mediterranean(goal)) or
+             (is_mediterranean(start) and is_red_sea(goal)))
+        )
     ):
-        if is_red_sea(start):
+        if is_indian_indopacific(start) or is_red_sea(start):
             p1, jump, p2 = route_via_canal(start, goal, "suez", "south", "north")
         else:
             p1, jump, p2 = route_via_canal(start, goal, "suez", "north", "south")
@@ -193,10 +214,7 @@ def compute_route(start, goal, smooth=True):
         )
 
     # ---------- SMOOTHING ----------
-    if smooth:
-        smoothed = douglas_peucker(raw_path, epsilon_km=10.0)
-    else:
-        smoothed = raw_path
+    smoothed = douglas_peucker(raw_path, epsilon_km=10.0) if smooth else raw_path
 
     # ---------- FINAL ETA ----------
     total_time = sum(
@@ -204,7 +222,6 @@ def compute_route(start, goal, smooth=True):
         for i in range(len(smoothed) - 1)
     )
 
-    # add canal penalties
     for c in canal_jumps:
         total_time += c["penalty_hours"]
 
@@ -213,7 +230,7 @@ def compute_route(start, goal, smooth=True):
     return {
         "route_raw": raw_path,
         "route_smooth": smoothed,
-        "canal_jumps": canal_jumps,  # <-- FOR WEB VISUALIZATION
+        "canal_jumps": canal_jumps,
         "travel_time_hours": round(total_time, 2),
         "num_waypoints_raw": len(raw_path),
         "num_waypoints_smooth": len(smoothed),
