@@ -15,34 +15,34 @@ from visualize_route import visualize_route
 
 TEST_CASES = [
 
-    # -------- AMERICAS (PANAMA VALIDATION) --------
-    {
-        "name": "Los Angeles → New York (Panama)",
-        "start": (34.0522, -118.2437),
-        "goal": (40.7128, -74.0060),
-    },
-    {
-        "name": "New York → Los Angeles (Panama reverse)",
-        "start": (40.7128, -74.0060),
-        "goal": (34.0522, -118.2437),
-    },
-    {
-        "name": "San Francisco → Rio de Janeiro",
-        "start": (37.7749, -122.4194),
-        "goal": (-22.9068, -43.1729),
-    },
+    # # -------- AMERICAS (PANAMA VALIDATION) --------
+    # {
+    #     "name": "Los Angeles → New York (Panama)",
+    #     "start": (34.0522, -118.2437),
+    #     "goal": (40.7128, -74.0060),
+    # },
+    # {
+    #     "name": "New York → Los Angeles (Panama reverse)",
+    #     "start": (40.7128, -74.0060),
+    #     "goal": (34.0522, -118.2437),
+    # },
+    # {
+    #     "name": "San Francisco → Rio de Janeiro",
+    #     "start": (37.7749, -122.4194),
+    #     "goal": (-22.9068, -43.1729),
+    # },
 
-    # -------- SOUTH AMERICA COASTAL --------
-    {
-        "name": "Callao (Peru) → Santos (Brazil)",
-        "start": (-12.0464, -77.0428),
-        "goal": (-23.9608, -46.3336),
-    },
-    {
-        "name": "Buenos Aires → Valparaíso",
-        "start": (-34.6037, -58.3816),
-        "goal": (-33.0472, -71.6127),
-    },
+    # # -------- SOUTH AMERICA COASTAL --------
+    # {
+    #     "name": "Callao (Peru) → Santos (Brazil)",
+    #     "start": (-12.0464, -77.0428),
+    #     "goal": (-23.9608, -46.3336),
+    # },
+    # {
+    #     "name": "Buenos Aires → Valparaíso",
+    #     "start": (-34.6037, -58.3816),
+    #     "goal": (-33.0472, -71.6127),
+    # },
 
     # # -------- INDIA ↔ EUROPE (SUEZ CORE) --------
     # {
@@ -63,7 +63,7 @@ TEST_CASES = [
 
     # # -------- ASIA ↔ EUROPE (SUEZ HEAVY LOAD) --------
     # {
-    #     "name": "Singapore → Hamburg (Suez)",
+    #     "name": "Singapore → Hamburg (Suez)", #flag
     #     "start": (1.3521, 103.8198),
     #     "goal": (53.5511, 9.9937),
     # },
@@ -75,29 +75,29 @@ TEST_CASES = [
 
     # # -------- SHORT SUEZ SANITY CHECKS --------
     # {
-    #     "name": "Jeddah → Istanbul (Suez)",
+    #     "name": "Jeddah → Istanbul (Suez)", #flag
     #     "start": (21.4858, 39.1925),
     #     "goal": (41.0082, 28.9784),
     # },
-    # {
-    #     "name": "Dubai → Athens (Suez)",
-    #     "start": (25.2048, 55.2708),
-    #     "goal": (37.9838, 23.7275),
-    # },
+    {
+        "name": "Dubai → Athens (Suez)",
+        "start": (25.2048, 55.2708),
+        "goal": (37.9838, 23.7275),
+    },
 
     # # -------- LONG HAUL STRESS TEST --------
     # {
-    #     "name": "London → Yokohama (Suez)",
+    #     "name": "London → Yokohama (Suez)", #flag
     #     "start": (51.5074, -0.1278),
     #     "goal": (35.4437, 139.6380),
     # },
 
-    # # -------- FAILURE / COMPARISON DEMO --------
-    # {
-    #     "name": "Singapore → Rotterdam (Suez vs Cape of Good Hope)",
-    #     "start": (1.3521, 103.8198),
-    #     "goal": (51.9244, 4.4777),
-    # },
+    # -------- FAILURE / COMPARISON DEMO --------
+    {
+        "name": "Singapore → Rotterdam (Suez vs Cape of Good Hope)",
+        "start": (1.3521, 103.8198),
+        "goal": (51.9244, 4.4777),
+    }
 ]
 
 

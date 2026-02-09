@@ -46,10 +46,10 @@ from tqdm import tqdm
 
 # ================= CONFIG =================
 GRID_RESOLUTION = 0.25
-VESSEL_DRAFT = 8.0
+VESSEL_DRAFT = 15
 
-LAT_MIN, LAT_MAX = 10.0, 50.0
-LON_MIN, LON_MAX = 20.0, 60.0
+LAT_MIN, LAT_MAX = -80.0, 80.0
+LON_MIN, LON_MAX = -180.0, 180.0
 # =========================================
 
 land_mask = None
