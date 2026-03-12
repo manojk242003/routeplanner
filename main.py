@@ -1,7 +1,7 @@
 # main.py
 
 import json
-from planner import compute_route
+from planner import compute_route, compute_route_with_refueling
 from visualize_route import visualize_route
 
 
@@ -20,6 +20,17 @@ def read_coord(prompt):
         except ValueError:
             print("❌ Invalid input. Please enter: <latitude> <longitude>")
 
+def read_float(prompt, default=None):
+    """Reads a float from user input."""
+    while True:
+        try:
+            val = input(prompt).strip()
+            if not val and default is not None:
+                return default
+            return float(val)
+        except ValueError:
+            print("❌ Invalid input. Please enter a number.")
+
 
 if __name__ == "__main__":
     print("=== Maritime Route Planner ===")
@@ -28,32 +39,26 @@ if __name__ == "__main__":
     # ----------- RUNTIME INPUT -----------
     start = read_coord("Enter START  (lat lon): ")
     goal  = read_coord("Enter GOAL   (lat lon): ")
+    max_fuel = read_float("Enter max fuel range in km [default 5000]: ", default=5000.0)
 
     print("\n[INFO] Start:", start)
     print("[INFO] Goal :", goal)
+    print(f"[INFO] Max Fuel Range: {max_fuel} km")
 
     # ----------- COMPUTE ROUTE -----------
-    result = compute_route(start, goal, smooth=True)
+    print("\n[INFO] Computing FASTEST route...")
+    res_fastest = compute_route(start, goal, smooth=True, mode="fastest")
+    
+    print("\n[INFO] Computing EFFICIENT route (with refueling)...")
+    res_efficient = compute_route_with_refueling(start, goal, max_fuel, smooth=True, mode="efficient")
+
 
     # ----------- SAVE TO route.json -----------
     output = {
         "start": start,
         "goal": goal,
-
-        # routes
-        "route_raw": result["route_raw"],
-        "route_smooth": result["route_smooth"],
-
-        # canal info
-        "canal_jumps": result.get("canal_jumps", []),
-
-        # stats
-        "travel_time_hours": result["travel_time_hours"],
-        "num_waypoints_raw": result["num_waypoints_raw"],
-        "num_waypoints_smooth": result["num_waypoints_smooth"],
-        "max_storm_risk": result["max_storm_risk"],
-        "avg_storm_risk": result["avg_storm_risk"],
-        "high_risk_waypoints": result["high_risk_waypoints"],
+        "fastest": res_fastest,
+        "efficient": res_efficient,
     }
 
     with open("route.json", "w") as f:
@@ -63,14 +68,19 @@ if __name__ == "__main__":
 
     # ----------- SUMMARY -----------
     print("\n===== ROUTE SUMMARY =====")
-    print("Raw waypoints     :", result["num_waypoints_raw"])
-    print("Smoothed waypoints:", result["num_waypoints_smooth"])
-    print("Travel time (hrs) :", result["travel_time_hours"])
-    print("Canal jumps       :", len(result.get("canal_jumps", [])))
-
-    if result.get("canal_jumps"):
-        for c in result["canal_jumps"]:
-            print(f" - {c['canal'].upper()} canal (+{c['penalty_hours']} hrs)")
+    for mode, res in [("FASTEST", res_fastest), ("EFFICIENT", res_efficient)]:
+        print(f"\n--- {mode} ---")
+        print(f"Travel time (hrs) : {res['travel_time_hours']}")
+        print(f"Waypoints (smooth): {res['num_waypoints_smooth']}")
+        
+        if "port_sequence" in res and res["port_sequence"]:
+            ports_str = " -> ".join(res["port_sequence"])
+            print(f"Refueling stops   : {ports_str}")
+            
+        print(f"Canal jumps       : {len(res.get('canal_jumps', []))}")
+        if res.get("canal_jumps"):
+            for c in res["canal_jumps"]:
+                print(f"  - {c['canal'].upper()} canal (+{c['penalty_hours']} hrs)")
 
     # ----------- VISUALIZE (IMPORTANT FIX) -----------
     print("\n[INFO] Launching route visualization...")
