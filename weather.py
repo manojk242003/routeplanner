@@ -1,8 +1,9 @@
+#weather.py
 import pickle
 import math
 
 # ======================================================
-# SPEED MODEL
+# SPEED MODEL (SIMPLIFIED + FAST)
 # ======================================================
 
 class SpeedModel:
@@ -10,47 +11,39 @@ class SpeedModel:
         self,
         base_speed_kmph,
         wave_height,
-        wave_dir=None,
-        ship_heading=None,
         storm_risk=0.0,
     ):
+        """
+        FAST speed model:
+        - minimal branching
+        - no angles
+        - safe lower bounds
+        """
+
         speed = base_speed_kmph
 
-        # ---------------- Wave height penalty ----------------
-        if wave_height < 1.0:
-            pass
-        elif wave_height < 2.5:
-            speed *= 0.9
-        elif wave_height < 4.0:
-            speed *= 0.75
-        else:
+        # -------- Wave penalty --------
+        if wave_height >= 4.0:
             speed *= 0.6
+        elif wave_height >= 2.5:
+            speed *= 0.75
+        elif wave_height >= 1.5:
+            speed *= 0.9
 
-        # ---------------- Directional penalty ----------------
-        if wave_dir is not None and ship_heading is not None:
-            rel = abs(wave_dir - ship_heading) % 360
-            rel = min(rel, 360 - rel)
-            if rel < 45:
-                speed *= 0.85
-            elif rel < 90:
-                speed *= 0.93
-
-        # ---------------- Storm risk penalty ----------------
-        if storm_risk > 0.9:
-            speed *= 0.1  # extreme storm
+        # -------- Storm penalty --------
+        if storm_risk > 0.8:
+            speed *= 0.2
         elif storm_risk > 0.5:
-            speed *= 0.4  # severe
+            speed *= 0.4
         elif storm_risk > 0.2:
-            speed *= 0.7  # moderate
+            speed *= 0.7
 
-        # general reduction factor
-        speed *= max(1.0 - 0.4 * storm_risk, 0.1)
-
-        return max(speed, 1.0)
+        # absolute floor (never zero)
+        return max(speed, 2.0)
 
 
 # ======================================================
-# WEATHER FIELD (CACHED LOOKUP) - OPTIMIZED
+# WEATHER FIELD (O(1) LOOKUPS ONLY)
 # ======================================================
 
 class WeatherField:
@@ -61,23 +54,18 @@ class WeatherField:
         print(f"[INFO] Weather cache loaded: {len(self.data):,} grid points")
 
     def _key(self, lat, lon):
-        # Round to match cache resolution (1 decimal = 0.1 degree)
+        # MUST match cache resolution
         return (round(lat, 1), round(lon, 1))
 
     def wave_height(self, lat, lon):
         return self.data.get(self._key(lat, lon), {}).get("wave_height", 2.0)
 
-    def wave_direction(self, lat, lon):
-        return self.data.get(self._key(lat, lon), {}).get("wave_dir")
-
     def storm_risk(self, lat, lon):
-        # Direct lookup - no iteration needed!
-        key = self._key(lat, lon)
-        return self.data.get(key, {}).get("storm_risk", 0.0)
+        return self.data.get(self._key(lat, lon), {}).get("storm_risk", 0.0)
 
 
 # ======================================================
-# ONE-TIME CACHE BUILDER - OPTIMIZED FOR SPARSE DATA
+# WEATHER CACHE BUILDER (NO CHANGE, JUST CLEANED)
 # ======================================================
 
 def build_dummy_weather_cache(
@@ -86,9 +74,8 @@ def build_dummy_weather_cache(
     storm_radius_km=600,
     output="weather_cache.pkl",
     resolution=1.0,
-    storm_intensity_multiplier=1.0  # NEW: Control storm strength
+    storm_intensity_multiplier=1.0
 ):
-    
     data = {}
 
     def haversine(a, b):
@@ -101,39 +88,31 @@ def build_dummy_weather_cache(
         return 2 * R * math.asin(math.sqrt(h))
 
     step = int(1.0 / resolution)
-    total_points = 0
     storm_points = 0
-    
-    print(f"[INFO] Generating weather data with {resolution}° resolution...")
-    print(f"[INFO] Coverage: lat {lat_min}° to {lat_max}°, lon {lon_min}° to {lon_max}°")
-    print(f"[INFO] STORM CENTER: {storm_center}")
-    print(f"[INFO] STORM RADIUS: {storm_radius_km} km")
-    print(f"[INFO] STORM INTENSITY: {storm_intensity_multiplier}x")
-    
+    total_points = 0
+
+    print(f"[INFO] Generating weather cache ({resolution}° resolution)")
+
     for lat in range(int(lat_min), int(lat_max), step):
         for lon in range(int(lon_min), int(lon_max), step):
             lat_f = float(lat)
             lon_f = float(lon)
 
-            # wave height: simple sinusoidal
             wave_h = 1.5 + 1.2 * abs(math.sin(math.radians(lat_f)))
-            wave_dir = (lon_f * 2) % 360
 
-            # storm intensity based on distance from storm center
             d = haversine((lat_f, lon_f), storm_center)
             if d < storm_radius_km:
-                # More intense near center, multiplier allows extreme storms
-                storm_risk = max(0.0, min(1.0, (1.0 - d / storm_radius_km) * storm_intensity_multiplier))
+                storm_risk = max(
+                    0.0,
+                    min(1.0, (1.0 - d / storm_radius_km) * storm_intensity_multiplier),
+                )
+                wave_h += 3.0 * storm_risk
                 storm_points += 1
-                
-                # Increase wave height in storm area
-                wave_h += 3.0 * storm_risk  # Add up to 3m waves in storm
             else:
                 storm_risk = 0.0
 
             data[(round(lat_f, 1), round(lon_f, 1))] = {
                 "wave_height": wave_h,
-                "wave_dir": wave_dir,
                 "storm_risk": storm_risk,
             }
             total_points += 1
@@ -141,9 +120,6 @@ def build_dummy_weather_cache(
     with open(output, "wb") as f:
         pickle.dump(data, f)
 
-    print(f"[OK] Weather cache written → {output}")
-    print(f"[OK] Total grid points: {total_points:,}")
-    print(f"[OK] Storm-affected points: {storm_points:,}")
-    import os
-    file_size_kb = os.path.getsize(output) / 1024
-    print(f"[OK] Cache size: {file_size_kb:.1f} KB")
+    print(f"[OK] Weather cache saved → {output}")
+    print(f"[OK] Grid points: {total_points:,}")
+    print(f"[OK] Storm points: {storm_points:,}")
