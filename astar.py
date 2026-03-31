@@ -1,7 +1,5 @@
-# astar.py
-
+#astar.py
 import heapq
-from tqdm import tqdm
 from geoutils import haversine
 from config import GOAL_THRESHOLD_KM, MAX_EXPANSIONS
 
@@ -9,7 +7,6 @@ from config import GOAL_THRESHOLD_KM, MAX_EXPANSIONS
 # ================= HEURISTIC =================
 
 def heuristic(a, b, max_speed_kmph):
-    # optimistic (admissible) time estimate
     return haversine(a, b) / max_speed_kmph
 
 
@@ -23,51 +20,58 @@ def reconstruct_path(came_from, current):
     return path[::-1]
 
 
-# ================= A* SEARCH =================
+# ================= A* SEARCH (STORM-AWARE) =================
 
-def astar(start, goal, neighbor_fn, cost_fn, max_speed_kmph):
+def astar(
+    start,
+    goal,
+    neighbor_fn,
+    cost_fn,
+    max_speed_kmph,
+    storm_checker=None,
+    storm_penalty=5.0,
+    early_exit_km=GOAL_THRESHOLD_KM
+):
+    """
+    storm_checker(lat, lon) -> risk [0..1]
+    """
+
     open_heap = [(0.0, start)]
     came_from = {}
     g_cost = {start: 0.0}
-    
-    # OPTIMIZATION: Track closed set to avoid re-expanding nodes
     closed_set = set()
 
     expansions = 0
 
-    pbar = tqdm(
-        total=MAX_EXPANSIONS,
-        desc="A* Search",
-        unit="nodes",
-        dynamic_ncols=True,
-    )
-
     while open_heap:
         _, current = heapq.heappop(open_heap)
-        
-        # Skip if already expanded
+
         if current in closed_set:
             continue
-        
         closed_set.add(current)
+
         expansions += 1
-        pbar.update(1)
-
         if expansions >= MAX_EXPANSIONS:
-            pbar.close()
-            raise RuntimeError(f"A* expansion limit exceeded ({MAX_EXPANSIONS:,} nodes)")
+            raise RuntimeError("A* expansion limit exceeded")
 
-        # Goal check
-        if haversine(current, goal) <= GOAL_THRESHOLD_KM:
-            pbar.close()
-            print(f"[A*] Goal reached after {expansions:,} expansions")
+        # 🎯 Goal reached
+        if haversine(current, goal) <= early_exit_km:
+            print(f"[A*] Goal reached ({expansions} expansions)")
             return reconstruct_path(came_from, current)
 
         for neighbor in neighbor_fn(current):
             if neighbor in closed_set:
                 continue
-                
-            tentative_g = g_cost[current] + cost_fn(current, neighbor)
+
+            # Base movement cost
+            step_cost = cost_fn(current, neighbor)
+
+            # 🌦️ Storm penalty (soft constraint)
+            if storm_checker:
+                risk = storm_checker(neighbor[0], neighbor[1])
+                step_cost *= (1.0 + storm_penalty * risk)
+
+            tentative_g = g_cost[current] + step_cost
 
             if neighbor not in g_cost or tentative_g < g_cost[neighbor]:
                 g_cost[neighbor] = tentative_g
@@ -75,5 +79,4 @@ def astar(start, goal, neighbor_fn, cost_fn, max_speed_kmph):
                 heapq.heappush(open_heap, (f, neighbor))
                 came_from[neighbor] = current
 
-    pbar.close()
-    raise RuntimeError("No route found - search space exhausted")
+    raise RuntimeError("No route found")
