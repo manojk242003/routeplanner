@@ -101,8 +101,16 @@ def is_europe_mediterranean(coord):
 
 # ================= HELPERS =================
 
+# Virtual connections for narrow straits that the grid missed
+EXTRA_EDGES = {
+    (40.5, 26.5): [(40.5, 27.0)],
+    (40.5, 27.0): [(40.5, 26.5)],
+}
+
 def snap_to_valid_node(point):
     lat, lon = point
+    # Wrap negative longitudes
+    lon = lon % 360.0
     return min(
         VALID_NODES,
         key=lambda v: (v[0] - lat) ** 2 + (v[1] - lon) ** 2
@@ -110,7 +118,12 @@ def snap_to_valid_node(point):
 
 def make_ocean_neighbors():
     def ocean_neighbors(node):
-        return [n for n in get_neighbors(node) if n in VALID_NODES]
+        neighbors = [n for n in get_neighbors(node) if n in VALID_NODES]
+        if node in EXTRA_EDGES:
+            for extra in EXTRA_EDGES[node]:
+                if extra in VALID_NODES:
+                    neighbors.append(extra)
+        return neighbors
     return ocean_neighbors
 
 

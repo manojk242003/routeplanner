@@ -18,22 +18,6 @@ def visualize_route(
     start = tuple(data["start"])
     goal = tuple(data["goal"])
 
-    # ================= LOAD WEATHER =================
-    try:
-        import pickle
-        with open("weather_cache.pkl", "rb") as f:
-            weather_data = pickle.load(f)
-        
-        # Extract storm risk points > 0
-        weather_points = []
-        for (lat, lon), w_data in weather_data.items():
-            risk = w_data.get("storm_risk", 0.0)
-            if risk > 0.05:
-                weather_points.append([lat, lon, risk])
-    except Exception as e:
-        print(f"[WARN] Could not load weather data for visualization: {e}")
-        weather_points = []
-
     # ================= MAP INIT =================
     m = folium.Map(
         location=start,
@@ -42,27 +26,12 @@ def visualize_route(
         control_scale=True,
     )
 
-    # Add Weather Heatmap if available
-    if weather_points:
-        try:
-            from folium.plugins import HeatMap
-            HeatMap(
-                weather_points, 
-                name="Storm Risk",
-                radius=15,
-                blur=20,
-                max_zoom=1,
-                gradient={0.2: 'blue', 0.4: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red'}
-            ).add_to(m)
-        except ImportError:
-            print("[WARN] folium.plugins missing (HeatMap not added).")
-
     all_points = [start, goal]
 
     # ================= ROUTES =================
     routes_config = [
         ("fastest", data.get("fastest"), "blue", 4, 0.85, "Fastest Route"),
-        ("efficient", data.get("efficient"), "green", 3, 0.9, "Efficient Route"),
+        ("efficient", data.get("efficient"), "orange", 4, 1.0, "Efficient Route"), # Changed to solid line, Using orange as pure yellow is hard to see on light map, but matching the request intention of visible solid
     ]
 
     for key, route_data, color, weight, opacity, tooltip_text in routes_config:
@@ -82,7 +51,7 @@ def visualize_route(
             weight=weight,
             opacity=opacity,
             tooltip=tooltip_text,
-            dash_array="5, 5" if key == "efficient" else None,
+            # removed dash array to ensure solid yellow/orange
         ).add_to(m)
 
         # Port stops for this route
