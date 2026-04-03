@@ -18,9 +18,12 @@ def get_neighbors(node):
         for dlon in (-step, 0, step):
             if dlat == 0 and dlon == 0:
                 continue
-            n = (
-                round((lat + dlat) / step) * step,
-                round((lon + dlon) / step) * step,
-            )
+            new_lat = round((lat + dlat) / step) * step
+            new_lon = round((lon + dlon) / step) * step
+            
+            # Wrap longitude around 0-360
+            new_lon = new_lon % 360.0
+            
+            n = (new_lat, new_lon)
             neighbors.append(n)
     return neighbors
