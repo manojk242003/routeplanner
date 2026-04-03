@@ -85,3 +85,4 @@ htmlcov/
 *.key
 *.pem
 *.secret
+maps

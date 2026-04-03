@@ -32,12 +32,12 @@ TEST_CASES = [
     #     "goal": (-22.9068, -43.1729),
     # },
 
-    # # -------- SOUTH AMERICA COASTAL --------
-    # {
-    #     "name": "Callao (Peru) → Santos (Brazil)",
-    #     "start": (-12.0464, -77.0428),
-    #     "goal": (-23.9608, -46.3336),
-    # },
+    # # # -------- SOUTH AMERICA COASTAL --------
+    # # {
+    # #     "name": "Callao (Peru) → Santos (Brazil)",#flag
+    # #     "start": (-12.0464, -77.0428),
+    # #     "goal": (-23.9608, -46.3336),
+    # # },
     # {
     #     "name": "Buenos Aires → Valparaíso",
     #     "start": (-34.6037, -58.3816),
@@ -61,7 +61,7 @@ TEST_CASES = [
     #     "goal": (37.9420, 23.6469),
     # },
 
-    # # -------- ASIA ↔ EUROPE (SUEZ HEAVY LOAD) --------
+    # -------- ASIA ↔ EUROPE (SUEZ HEAVY LOAD) --------
     # {
     #     "name": "Singapore → Hamburg (Suez)", #flag
     #     "start": (1.3521, 103.8198),
@@ -73,17 +73,17 @@ TEST_CASES = [
     #     "goal": (44.4056, 8.9463),
     # },
 
-    # # -------- SHORT SUEZ SANITY CHECKS --------
+    # -------- SHORT SUEZ SANITY CHECKS --------
     # {
     #     "name": "Jeddah → Istanbul (Suez)", #flag
     #     "start": (21.4858, 39.1925),
     #     "goal": (41.0082, 28.9784),
     # },
-    {
-        "name": "Dubai → Athens (Suez)",
-        "start": (25.2048, 55.2708),
-        "goal": (37.9838, 23.7275),
-    },
+    # {
+    #     "name": "Dubai → Athens (Suez)",
+    #     "start": (25.2048, 55.2708),
+    #     "goal": (37.9838, 23.7275),
+    # },
 
     # # -------- LONG HAUL STRESS TEST --------
     # {
@@ -92,12 +92,31 @@ TEST_CASES = [
     #     "goal": (35.4437, 139.6380),
     # },
 
-    # -------- FAILURE / COMPARISON DEMO --------
-    {
-        "name": "Singapore → Rotterdam (Suez vs Cape of Good Hope)",
-        "start": (1.3521, 103.8198),
+    # # -------- FAILURE / COMPARISON DEMO -------- 
+    # { 
+    #     "name": "Singapore → Rotterdam (Suez vs Cape of Good Hope)", #flag
+    #     "start": (1.3521, 103.8198),
+    #     "goal": (51.9244, 4.4777),
+    # }
+
+    { 
+        "name": "shangai → Rotterdam (Suez vs Cape of Good Hope)", 
+        "start": (31.2304, 121.4737),
         "goal": (51.9244, 4.4777),
     }
+    # { 
+    #     "name": "dalian → Rotterdam (Suez vs Cape of Good Hope)", 
+    #     "start": (38.91222, 121.6022),
+    #     "goal": (51.9244, 4.4777),
+    # }
+    # { 
+    #     "name": "mumbai → london (Suez vs Cape of Good Hope)", 
+    #     "start": (19.0760, 72.8777),
+    #     "goal": (51.5074, -0.1278),
+    # }
+
+
+
 ]
 
 
@@ -111,6 +130,7 @@ def run_test(test):
     result = compute_route(
         test["start"],
         test["goal"],
+        15,
         smooth=True
     )
 

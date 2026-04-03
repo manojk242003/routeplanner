@@ -7,13 +7,12 @@ from grid import snap_to_grid, get_neighbors
 from astar import astar
 from smoothing import douglas_peucker
 from geoutils import haversine
-from config import VESSEL_SPEED_KMPH
 from weather import WeatherField, SpeedModel
-
+from config import VESSEL_SPEED_KMPH
 
 # ================= LOAD PRECOMPUTED GRID =================
 
-with open("valid_nodes (1).pkl", "rb") as f:
+with open("valid_nodes_world.pkl", "rb") as f:
     VALID_NODES_LIST = pickle.load(f)
 
 VALID_NODES = set(VALID_NODES_LIST)
@@ -73,7 +72,7 @@ def is_atlantic(coord):
 
 def in_afro_eurasia(coord):
     lat, lon = coord
-    return -40.0 <= lat <= 70.0 and -20.0 <= lon <= 120.0
+    return -40.0 <= lat <= 70.0 and -20.0 <= lon <= 135.0
 
 def is_red_sea(coord):
     return 12.0 <= coord[0] <= 30.0 and 32.0 <= coord[1] <= 44.0
@@ -88,7 +87,7 @@ def is_indian_indopacific(coord):
     lat, lon = coord
     return (
         40.0 <= lon <= 130.0 and
-        -40.0 <= lat <= 35.0
+        -40.0 <= lat <= 40
     )
 
 def is_europe_mediterranean(coord):
@@ -129,7 +128,7 @@ def make_ocean_neighbors():
 
 # ================= COST FUNCTION =================
 
-def time_cost(a, b, search_mode=True):
+def time_cost(a, b,VESSEL_SPEED_KMPH, search_mode=True):
     dist = haversine(a, b)
 
     wave_h = weather.wave_height(*a)
@@ -163,7 +162,7 @@ def distance_cost(a, b, search_mode=True):
 
 # ================= CANAL HANDLER =================
 
-def route_via_canal(start, goal, canal_name, side_a, side_b, mode="fastest"):
+def route_via_canal(start, goal, canal_name, side_a, side_b,VESSEL_SPEED_KMPH,mode="fastest"):
     canal = CANALS[canal_name]
 
     a = snap_to_valid_node(snap_to_grid(canal[side_a]))
@@ -198,7 +197,7 @@ def route_via_canal(start, goal, canal_name, side_a, side_b, mode="fastest"):
 
 # ================= MAIN API =================
 
-def compute_route(start, goal, smooth=True, mode="fastest"):
+def compute_route(start, goal, VESSEL_SPEED_KMPH,smooth=True,mode="fastest"):
     start = snap_to_valid_node(snap_to_grid(start))
     goal  = snap_to_valid_node(snap_to_grid(goal))
 
