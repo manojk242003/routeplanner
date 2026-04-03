@@ -18,11 +18,18 @@ def visualize_route(
     start = tuple(data["start"])
     goal = tuple(data["goal"])
 
+    def norm_lon(lon, ref=start[1]):
+        while lon - ref > 180:
+            lon -= 360
+        while lon - ref < -180:
+            lon += 360
+        return lon
+
     # ================= MAP INIT =================
     m = folium.Map(
         location=start,
         zoom_start=4,
-        tiles="OpenStreetMap", 
+        tiles="CartoDB positron", 
         control_scale=True,
     )
 
@@ -42,7 +49,7 @@ def visualize_route(
         if not route_smooth:
             continue
 
-        route_coords = [(float(lat), float(lon)) for lat, lon in route_smooth]
+        route_coords = [(float(lat), norm_lon(float(lon))) for lat, lon in route_smooth]
         all_points.extend(route_coords)
 
         folium.PolyLine(
@@ -71,17 +78,18 @@ def visualize_route(
                     continue
                 if port_name in ports_coords:
                     p_coord = ports_coords[port_name]
-                    all_points.append(p_coord)
+                    p_norm = (p_coord[0], norm_lon(p_coord[1]))
+                    all_points.append(p_norm)
                     folium.Marker(
-                        p_coord,
+                        p_norm,
                         popup=f"Refueling Stop: {port_name}",
                         icon=folium.Icon(color="orange", icon="info-sign"),
                     ).add_to(m)
 
         # Canal jumps for this route
         for jump in route_data.get("canal_jumps", []):
-            p_from = tuple(jump["from"])
-            p_to = tuple(jump["to"])
+            p_from = (float(jump["from"][0]), norm_lon(float(jump["from"][1])))
+            p_to = (float(jump["to"][0]), norm_lon(float(jump["to"][1])))
             canal = jump["canal"].upper()
             penalty = jump["penalty_hours"]
 
@@ -120,7 +128,7 @@ def visualize_route(
     ).add_to(m)
 
     folium.Marker(
-        goal,
+        (goal[0], norm_lon(goal[1])),
         popup="Goal",
         icon=folium.Icon(color="red", icon="stop"),
     ).add_to(m)
