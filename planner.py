@@ -13,7 +13,7 @@ from weather import WeatherField, SpeedModel
 
 # ================= LOAD PRECOMPUTED GRID =================
 
-with open("valid_nodes (1).pkl", "rb") as f:
+with open("valid_nodes_world.pkl", "rb") as f:
     VALID_NODES_LIST = pickle.load(f)
 
 VALID_NODES = set(VALID_NODES_LIST)
