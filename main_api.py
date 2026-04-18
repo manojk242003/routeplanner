@@ -44,41 +44,6 @@ def resolve_location(
     raise ValueError(f"{label} location missing")
 
 
-def save_and_visualize(result: dict, start: tuple, goal: tuple) -> str:
-    """
-    Persist route JSON + HTML map, return the public HTML URL.
-    """
-    map_id = uuid.uuid4().hex
-    route_json_path = os.path.join(MAPS_DIR, f"{map_id}.json")
-    map_html_path   = os.path.join(MAPS_DIR, f"{map_id}.html")
-
-    route_payload = {
-        "start":  list(start),
-        "goal":   list(goal),
-        "route_smooth":        result["route_smooth"],
-        "canal_jumps":         result.get("canal_jumps", []),
-        "travel_time_hours":   result["travel_time_hours"],
-        "num_waypoints_raw":   result.get("num_waypoints_raw"),
-        "num_waypoints_smooth":result.get("num_waypoints_smooth"),
-        "max_storm_risk":      result.get("max_storm_risk"),
-        "avg_storm_risk":      result.get("avg_storm_risk"),
-        # included when a refueling route was computed
-        "port_sequence":       result.get("port_sequence"),
-    }
-
-    with open(route_json_path, "w") as f:
-        json.dump(route_payload, f, indent=2)
-
-    visualize_route(
-        route_json_path=route_json_path,
-        output_html=map_html_path,
-        open_browser=False,
-    )
-
-    print(f"[INFO] Map generated → {map_id}.html")
-    return f"http://localhost:8000/maps/{map_id}.html"
-
-
 # ─────────────────────────── APP SETUP ──────────────────────────
 
 origins = ["http://localhost:5173"]
@@ -107,8 +72,7 @@ class RouteRequest(BaseModel):
 
     # Routing parameters
     averageSpeed: float               # knots
-    mode:         str  = "fastest"   # "fastest" | "efficient"
-    maxFuel:      Optional[float] = None  # km; required for "efficient" mode
+    maxFuel:      float               # km — required, used for efficient route
 
 
 # ────────────────────────── ROUTES ──────────────────────────────
@@ -124,44 +88,64 @@ def generate_route(request: RouteRequest):
         # Convert knots → km/h  (1 knot = 1.852 km/h)
         vessel_speed_kmph = request.averageSpeed * 1.852
 
-        print(f"[INFO] Start : {start}")
-        print(f"[INFO] Goal  : {goal}")
-        print(f"[INFO] Speed : {vessel_speed_kmph:.1f} km/h")
-        print(f"[INFO] Mode  : {request.mode}")
+        print(f"[INFO] Start    : {start}")
+        print(f"[INFO] Goal     : {goal}")
+        print(f"[INFO] Speed    : {vessel_speed_kmph:.1f} km/h")
+        print(f"[INFO] Max fuel : {request.maxFuel} km")
 
-        if request.mode == "efficient":
-            if request.maxFuel is None:
-                raise ValueError("maxFuel is required for 'efficient' mode")
-            print(f"[INFO] Max fuel range: {request.maxFuel} km")
-            result = compute_route_with_refueling(
-                start, goal,
-                request.maxFuel,
-                smooth=True,
-                mode="efficient",
-            )
-        else:
-            result = compute_route(
-                start, goal,
-                smooth=True,
-                mode="fastest",
-            )
+        # ----------- COMPUTE BOTH ROUTES (mirrors main.py) -----------
+        print("\n[INFO] Computing FASTEST route...")
+        res_fastest = compute_route(start, goal, vessel_speed_kmph, smooth=True, mode="fastest")
 
-        map_url = save_and_visualize(result, start, goal)
+        print("\n[INFO] Computing EFFICIENT route (with refueling)...")
+        res_efficient = compute_route_with_refueling(start, goal, request.maxFuel, vessel_speed_kmph, smooth=True, mode="efficient")
 
-        response = {
-            "map_url":            map_url,
-            "travel_time_hours":  result["travel_time_hours"],
-            "num_waypoints":      result.get("num_waypoints_smooth"),
-            "max_storm_risk":     result.get("max_storm_risk"),
-            "avg_storm_risk":     result.get("avg_storm_risk"),
-            "high_risk_waypoints":result.get("high_risk_waypoints"),
-            "canal_jumps":        result.get("canal_jumps", []),
+        # ----------- SAVE COMBINED JSON (mirrors main.py) -----------
+        map_id = uuid.uuid4().hex
+        route_json_path = os.path.join(MAPS_DIR, f"{map_id}.json")
+        map_html_path   = os.path.join(MAPS_DIR, f"{map_id}.html")
+
+        output = {
+            "start":    list(start),
+            "goal":     list(goal),
+            "fastest":  res_fastest,
+            "efficient": res_efficient,
         }
 
-        if "port_sequence" in result:
-            response["port_sequence"] = result["port_sequence"]
+        with open(route_json_path, "w") as f:
+            json.dump(output, f, indent=2)
 
-        return response
+        print(f"\n[OK] route.json written → {map_id}.json")
+
+        # ----------- VISUALIZE -----------
+        visualize_route(
+            route_json_path=route_json_path,
+            output_html=map_html_path,
+            open_browser=False,
+        )
+
+        print(f"[INFO] Map generated → {map_id}.html")
+
+        return {
+            "map_url": f"http://localhost:8000/maps/{map_id}.html",
+            "fastest": {
+                "travel_time_hours":  res_fastest["travel_time_hours"],
+                "num_waypoints":      res_fastest["num_waypoints_smooth"],
+                "max_storm_risk":     res_fastest["max_storm_risk"],
+                "avg_storm_risk":     res_fastest["avg_storm_risk"],
+                "high_risk_waypoints":res_fastest["high_risk_waypoints"],
+                "canal_jumps":        res_fastest.get("canal_jumps", []),
+            },
+            "efficient": {
+                "travel_time_hours":  res_efficient["travel_time_hours"],
+                "num_waypoints":      res_efficient["num_waypoints_smooth"],
+                "max_storm_risk":     res_efficient["max_storm_risk"],
+                "avg_storm_risk":     res_efficient["avg_storm_risk"],
+                "high_risk_waypoints":res_efficient["high_risk_waypoints"],
+                "canal_jumps":        res_efficient.get("canal_jumps", []),
+                "port_sequence":      res_efficient.get("port_sequence", []),
+            },
+        }
 
     except Exception as e:
         print("[ERROR]", str(e))
@@ -186,7 +170,6 @@ async def upload_csv(file: UploadFile = File(...)):
     for index, row in df.iterrows():
         try:
             vessel_speed_kmph = float(row["averageSpeed"]) * 1.852
-            mode = str(row.get("mode", "fastest")).strip().lower()
 
             # ── resolve start ──
             if not pd.isna(row.get("startLatitude")) and not pd.isna(row.get("startLongitude")):
@@ -204,33 +187,49 @@ async def upload_csv(file: UploadFile = File(...)):
             else:
                 raise ValueError("Destination location missing")
 
-            # ── compute ──
-            if mode == "efficient":
-                max_fuel = float(row.get("maxFuel", 5000))
-                result = compute_route_with_refueling(
-                    start, goal,
-                    max_fuel,
-                    smooth=True,
-                    mode="efficient",
-                )
-            else:
-                result = compute_route(
-                    start, goal,
-                    smooth=True,
-                    mode="fastest",
-                )
+            max_fuel = float(row.get("maxFuel", 5000))
 
-            map_url = save_and_visualize(result, start, goal)
+            # ── compute both routes (mirrors main.py) ──
+            print(f"\n[INFO] Row {index + 1}: Computing FASTEST route...")
+            res_fastest = compute_route(start, goal, vessel_speed_kmph, smooth=True, mode="fastest")
 
-            entry = {
-                "row":               index + 1,
-                "map_url":           map_url,
-                "travel_time_hours": result["travel_time_hours"],
+            print(f"[INFO] Row {index + 1}: Computing EFFICIENT route...")
+            res_efficient = compute_route_with_refueling(start, goal, max_fuel, vessel_speed_kmph, smooth=True, mode="efficient")
+
+            # ── save combined JSON ──
+            map_id = uuid.uuid4().hex
+            route_json_path = os.path.join(MAPS_DIR, f"{map_id}.json")
+            map_html_path   = os.path.join(MAPS_DIR, f"{map_id}.html")
+
+            output = {
+                "start":     list(start),
+                "goal":      list(goal),
+                "fastest":   res_fastest,
+                "efficient": res_efficient,
             }
-            if "port_sequence" in result:
-                entry["port_sequence"] = result["port_sequence"]
 
-            results.append(entry)
+            with open(route_json_path, "w") as f:
+                json.dump(output, f, indent=2)
+
+            visualize_route(
+                route_json_path=route_json_path,
+                output_html=map_html_path,
+                open_browser=False,
+            )
+
+            results.append({
+                "row":     index + 1,
+                "map_url": f"http://localhost:8000/maps/{map_id}.html",
+                "fastest": {
+                    "travel_time_hours": res_fastest["travel_time_hours"],
+                    "canal_jumps":       res_fastest.get("canal_jumps", []),
+                },
+                "efficient": {
+                    "travel_time_hours": res_efficient["travel_time_hours"],
+                    "port_sequence":     res_efficient.get("port_sequence", []),
+                    "canal_jumps":       res_efficient.get("canal_jumps", []),
+                },
+            })
 
         except Exception as e:
             results.append({"row": index + 1, "error": str(e)})
