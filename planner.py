@@ -7,7 +7,7 @@ from grid import snap_to_grid, get_neighbors
 from astar import astar
 from smoothing import douglas_peucker
 from geoutils import haversine
-from config import VESSEL_SPEED_KMPH
+from config import VESSEL_SPEED_KMPH as DEFAULT_VESSEL_SPEED_KMPH
 from weather import WeatherField, SpeedModel
 
 
@@ -32,7 +32,6 @@ try:
         for row in reader:
             lat = float(row["lat"])
             lon = float(row["lon"])
-            # Snap port to a valid ocean node to ensure we can actually route to it
             node = min(
                 VALID_NODES,
                 key=lambda v: (v[0] - lat) ** 2 + (v[1] - lon) ** 2
@@ -82,7 +81,7 @@ def is_mediterranean(coord):
     return 30.0 <= coord[0] <= 46.0 and -6.0 <= coord[1] <= 36.0
 
 
-# ======== BASIN HELPERS (ADDED) ========
+# ======== BASIN HELPERS ========
 
 def is_indian_indopacific(coord):
     lat, lon = coord
@@ -109,7 +108,6 @@ EXTRA_EDGES = {
 
 def snap_to_valid_node(point):
     lat, lon = point
-    # Wrap negative longitudes
     lon = lon % 360.0
     return min(
         VALID_NODES,
@@ -127,17 +125,17 @@ def make_ocean_neighbors():
     return ocean_neighbors
 
 
-# ================= COST FUNCTION =================
+# ================= COST FUNCTIONS =================
 
-def time_cost(a, b, search_mode=True):
+def time_cost(a, b, vessel_speed_kmph, search_mode=True):
     dist = haversine(a, b)
 
-    wave_h = weather.wave_height(*a)
+    wave_h   = weather.wave_height(*a)
     wave_dir = weather.wave_direction(*a)
-    storm = weather.storm_risk(*a)
+    storm    = weather.storm_risk(*a)
 
     speed = speed_model.effective_speed(
-        VESSEL_SPEED_KMPH,
+        vessel_speed_kmph,
         wave_h,
         wave_dir,
         ship_heading=None,
@@ -157,13 +155,13 @@ def time_cost(a, b, search_mode=True):
 
     return t
 
-def distance_cost(a, b, search_mode=True):
-    return haversine(a, b) / VESSEL_SPEED_KMPH
+def distance_cost(a, b, vessel_speed_kmph, search_mode=True):
+    return haversine(a, b) / vessel_speed_kmph
 
 
 # ================= CANAL HANDLER =================
 
-def route_via_canal(start, goal, canal_name, side_a, side_b, mode="fastest"):
+def route_via_canal(start, goal, canal_name, side_a, side_b, vessel_speed_kmph, mode="fastest"):
     canal = CANALS[canal_name]
 
     a = snap_to_valid_node(snap_to_grid(canal[side_a]))
@@ -172,24 +170,23 @@ def route_via_canal(start, goal, canal_name, side_a, side_b, mode="fastest"):
     print(f"[INFO] Routing via {canal_name.upper()} Canal")
 
     neighbors = make_ocean_neighbors()
-    cost_fn = time_cost
 
     path1 = astar(
         start, a, neighbors,
-        lambda x, y: cost_fn(x, y, True),
-        VESSEL_SPEED_KMPH,
+        lambda x, y: time_cost(x, y, vessel_speed_kmph, True),
+        vessel_speed_kmph,
     )
 
     path2 = astar(
         b, goal, neighbors,
-        lambda x, y: cost_fn(x, y, True),
-        VESSEL_SPEED_KMPH,
+        lambda x, y: time_cost(x, y, vessel_speed_kmph, True),
+        vessel_speed_kmph,
     )
 
     canal_jump = {
-        "from": a,
-        "to": b,
-        "canal": canal_name,
+        "from":          a,
+        "to":            b,
+        "canal":         canal_name,
         "penalty_hours": canal["penalty_hours"],
     }
 
@@ -198,16 +195,32 @@ def route_via_canal(start, goal, canal_name, side_a, side_b, mode="fastest"):
 
 # ================= MAIN API =================
 
-def compute_route(start, goal, smooth=True, mode="fastest"):
+def compute_route(start, goal, vessel_speed_kmph=None, smooth=True, mode="fastest"):
+    """
+    Compute the optimal ocean route between two coordinates.
+
+    Args:
+        start               : (lat, lon) tuple
+        goal                : (lat, lon) tuple
+        vessel_speed_kmph   : cruising speed in km/h; falls back to config default if None
+        smooth              : apply Douglas-Peucker smoothing to the path
+        mode                : "fastest" (time-optimised) — reserved for future cost variants
+
+    Returns a dict with route_raw, route_smooth, canal_jumps, travel metrics, and storm stats.
+    """
+    if vessel_speed_kmph is None:
+        vessel_speed_kmph = DEFAULT_VESSEL_SPEED_KMPH
+
     start = snap_to_valid_node(snap_to_grid(start))
     goal  = snap_to_valid_node(snap_to_grid(goal))
 
     print("[INFO] Snapped start:", start)
     print("[INFO] Snapped goal :", goal)
+    print(f"[INFO] Vessel speed : {vessel_speed_kmph:.1f} km/h")
 
-    neighbors = make_ocean_neighbors()
+    neighbors  = make_ocean_neighbors()
     canal_jumps = []
-    raw_path = []
+    raw_path    = []
 
     # ---------- PANAMA ----------
     if (
@@ -216,20 +229,17 @@ def compute_route(start, goal, smooth=True, mode="fastest"):
          (is_atlantic(start) and is_pacific(goal)))
     ):
         if is_pacific(start):
-            p1, jump, p2 = route_via_canal(start, goal, "panama", "pacific", "atlantic", mode)
+            p1, jump, p2 = route_via_canal(start, goal, "panama", "pacific", "atlantic", vessel_speed_kmph, mode)
         else:
-            p1, jump, p2 = route_via_canal(start, goal, "panama", "atlantic", "pacific", mode)
+            p1, jump, p2 = route_via_canal(start, goal, "panama", "atlantic", "pacific", vessel_speed_kmph, mode)
 
         raw_path = p1 + [jump["from"], jump["to"]] + p2
         canal_jumps.append(jump)
 
-    # ---------- SUEZ (FIXED) ----------
+    # ---------- SUEZ ----------
     elif (
-        # Indo-Pacific (India / China / SE Asia) ↔ Europe
         (is_indian_indopacific(start) and is_europe_mediterranean(goal)) or
         (is_europe_mediterranean(start) and is_indian_indopacific(goal)) or
-
-        # Local Red Sea ↔ Mediterranean
         (
             in_afro_eurasia(start) and in_afro_eurasia(goal) and
             ((is_red_sea(start) and is_mediterranean(goal)) or
@@ -237,29 +247,27 @@ def compute_route(start, goal, smooth=True, mode="fastest"):
         )
     ):
         if is_indian_indopacific(start) or is_red_sea(start):
-            p1, jump, p2 = route_via_canal(start, goal, "suez", "south", "north", mode)
+            p1, jump, p2 = route_via_canal(start, goal, "suez", "south", "north", vessel_speed_kmph, mode)
         else:
-            p1, jump, p2 = route_via_canal(start, goal, "suez", "north", "south", mode)
+            p1, jump, p2 = route_via_canal(start, goal, "suez", "north", "south", vessel_speed_kmph, mode)
 
         raw_path = p1 + [jump["from"], jump["to"]] + p2
         canal_jumps.append(jump)
 
     # ---------- DIRECT ----------
     else:
-        cost_fn = time_cost
         raw_path = astar(
             start, goal, neighbors,
-            lambda a, b: cost_fn(a, b, True),
-            VESSEL_SPEED_KMPH,
+            lambda a, b: time_cost(a, b, vessel_speed_kmph, True),
+            vessel_speed_kmph,
         )
 
     # ---------- SMOOTHING ----------
     smoothed = douglas_peucker(raw_path, epsilon_km=10.0) if smooth else raw_path
 
     # ---------- FINAL ETA ----------
-    cost_fn = time_cost
     total_time = sum(
-        cost_fn(smoothed[i], smoothed[i + 1], False)
+        time_cost(smoothed[i], smoothed[i + 1], vessel_speed_kmph, False)
         for i in range(len(smoothed) - 1)
     )
 
@@ -269,34 +277,48 @@ def compute_route(start, goal, smooth=True, mode="fastest"):
     storms = [weather.storm_risk(*p) for p in smoothed]
 
     return {
-        "route_raw": raw_path,
-        "route_smooth": smoothed,
-        "canal_jumps": canal_jumps,
-        "travel_time_hours": round(total_time, 2),
-        "num_waypoints_raw": len(raw_path),
-        "num_waypoints_smooth": len(smoothed),
-        "max_storm_risk": round(max(storms), 2) if storms else 0.0,
-        "avg_storm_risk": round(sum(storms) / len(storms), 2) if storms else 0.0,
-        "high_risk_waypoints": sum(1 for s in storms if s > 0.5),
+        "route_raw":             raw_path,
+        "route_smooth":          smoothed,
+        "canal_jumps":           canal_jumps,
+        "travel_time_hours":     round(total_time, 2),
+        "num_waypoints_raw":     len(raw_path),
+        "num_waypoints_smooth":  len(smoothed),
+        "max_storm_risk":        round(max(storms), 2)             if storms else 0.0,
+        "avg_storm_risk":        round(sum(storms) / len(storms), 2) if storms else 0.0,
+        "high_risk_waypoints":   sum(1 for s in storms if s > 0.5),
     }
 
-def compute_route_with_refueling(start, goal, max_fuel_range_km, smooth=True, mode="fastest"):
+
+def compute_route_with_refueling(start, goal, max_fuel_range_km, vessel_speed_kmph=None, smooth=True, mode="fastest"):
     """
-    Computes a route that guarantees no single leg exceeds max_fuel_range_km, 
-    by stopping at ports when necessary.
-    Uses A* on a virtual graph of ports.
+    Compute a route that guarantees no single leg exceeds max_fuel_range_km by
+    stopping at intermediate ports when necessary.  Uses A* on a virtual port graph,
+    then stitches real ocean legs between each consecutive port pair.
+
+    Args:
+        start               : (lat, lon) tuple
+        goal                : (lat, lon) tuple
+        max_fuel_range_km   : maximum range before refueling is required
+        vessel_speed_kmph   : cruising speed in km/h; falls back to config default if None
+        smooth              : apply Douglas-Peucker smoothing to each leg
+        mode                : routing mode passed through to compute_route
+
+    Returns the same dict shape as compute_route, extended with a "port_sequence" key.
     """
+    if vessel_speed_kmph is None:
+        vessel_speed_kmph = DEFAULT_VESSEL_SPEED_KMPH
+
     start_snapped = snap_to_valid_node(snap_to_grid(start))
     goal_snapped  = snap_to_valid_node(snap_to_grid(goal))
 
-    print(f"\n[INFO] Fuel-Constrained Routing (Max {max_fuel_range_km} km)")
+    print(f"\n[INFO] Fuel-Constrained Routing (Max {max_fuel_range_km} km, {vessel_speed_kmph:.1f} km/h)")
 
-    # 1. Build Port Graph + Start/Goal
+    # 1. Build virtual node graph: START + all ports + GOAL
     nodes = {"START": start_snapped, "GOAL": goal_snapped}
     for name, node in PORTS.items():
         nodes[name] = node
 
-    # 2. Port Graph A* Helper Functions
+    # 2. Port-graph helpers
     def port_neighbors(current_key):
         current_node = nodes[current_key]
         neighbors = []
@@ -304,10 +326,10 @@ def compute_route_with_refueling(start, goal, max_fuel_range_km, smooth=True, mo
             if n_key == current_key:
                 continue
             dist = haversine(current_node, n_node)
-            # Use 0.8 as a safety factor since direct hauling might cross land
+            # 0.8 safety factor — straight-line may cross land
             if dist <= max_fuel_range_km * 0.8:
                 neighbors.append(n_key)
-        # Always allow trying goal directly if it's within optimistic range
+        # Always allow a direct attempt to GOAL if within range
         if "GOAL" not in neighbors and haversine(current_node, nodes["GOAL"]) <= max_fuel_range_km:
             neighbors.append("GOAL")
         return neighbors
@@ -315,12 +337,11 @@ def compute_route_with_refueling(start, goal, max_fuel_range_km, smooth=True, mo
     def port_cost(a_key, b_key):
         return haversine(nodes[a_key], nodes[b_key])
 
-    # 3. A* on Port Graph
-    open_heap = [(0.0, "START")]
-    came_from = {}
-    g_cost = {"START": 0.0}
-    closed_set = set()
-
+    # 3. A* on port graph
+    open_heap    = [(0.0, "START")]
+    came_from    = {}
+    g_cost       = {"START": 0.0}
+    closed_set   = set()
     found_sequence = None
 
     while open_heap:
@@ -342,62 +363,54 @@ def compute_route_with_refueling(start, goal, max_fuel_range_km, smooth=True, mo
         for neighbor in port_neighbors(current):
             if neighbor in closed_set:
                 continue
-            
             tentative_g = g_cost[current] + port_cost(current, neighbor)
-            
             if neighbor not in g_cost or tentative_g < g_cost[neighbor]:
                 g_cost[neighbor] = tentative_g
                 h = haversine(nodes[neighbor], nodes["GOAL"])
-                f = tentative_g + h
-                heapq.heappush(open_heap, (f, neighbor))
+                heapq.heappush(open_heap, (tentative_g + h, neighbor))
                 came_from[neighbor] = current
 
     if not found_sequence:
-        print("[WARN] No valid refueling sequence found. Proceeding with direct route.")
-        return compute_route(start, goal, smooth, mode)
+        print("[WARN] No valid refueling sequence found. Falling back to direct route.")
+        return compute_route(start, goal, vessel_speed_kmph, smooth, mode)
 
     print(f"[INFO] Optimal port sequence: {' -> '.join(found_sequence)}")
 
-    # 4. Stitch actual ocean routes between the sequence
-    full_route_raw = []
+    # 4. Stitch real ocean legs between consecutive ports
+    full_route_raw    = []
     full_route_smooth = []
-    full_canal_jumps = []
-    total_time = 0.0
-    all_storms = []
+    full_canal_jumps  = []
+    total_time        = 0.0
+    all_storms        = []
 
     for i in range(len(found_sequence) - 1):
         seg_start = nodes[found_sequence[i]]
-        seg_goal = nodes[found_sequence[i+1]]
-        
-        print(f"       Computing leg: {found_sequence[i]} -> {found_sequence[i+1]}")
-        seg_result = compute_route(seg_start, seg_goal, smooth, mode)
-        
-        # Avoid duplicating the overlapping waypoints
-        if i > 0 and len(seg_result["route_raw"]) > 0:
-            full_route_raw.extend(seg_result["route_raw"][1:])
+        seg_goal  = nodes[found_sequence[i + 1]]
+
+        print(f"       Leg {i + 1}: {found_sequence[i]} → {found_sequence[i + 1]}")
+        seg = compute_route(seg_start, seg_goal, vessel_speed_kmph, smooth, mode)
+
+        # Avoid duplicating the shared waypoint between consecutive legs
+        if i > 0:
+            full_route_raw.extend(seg["route_raw"][1:])
+            full_route_smooth.extend(seg["route_smooth"][1:])
         else:
-            full_route_raw.extend(seg_result["route_raw"])
-            
-        if i > 0 and len(seg_result["route_smooth"]) > 0:
-            full_route_smooth.extend(seg_result["route_smooth"][1:])
-        else:
-            full_route_smooth.extend(seg_result["route_smooth"])
-            
-        full_canal_jumps.extend(seg_result.get("canal_jumps", []))
-        total_time += seg_result["travel_time_hours"]
-        
-        # Recalculate combined storm risk
-        all_storms.extend([weather.storm_risk(*p) for p in seg_result["route_smooth"]])
+            full_route_raw.extend(seg["route_raw"])
+            full_route_smooth.extend(seg["route_smooth"])
+
+        full_canal_jumps.extend(seg.get("canal_jumps", []))
+        total_time += seg["travel_time_hours"]
+        all_storms.extend(weather.storm_risk(*p) for p in seg["route_smooth"])
 
     return {
-        "route_raw": full_route_raw,
-        "route_smooth": full_route_smooth,
-        "canal_jumps": full_canal_jumps,
-        "travel_time_hours": round(total_time, 2),
-        "num_waypoints_raw": len(full_route_raw),
-        "num_waypoints_smooth": len(full_route_smooth),
-        "max_storm_risk": round(max(all_storms), 2) if all_storms else 0.0,
-        "avg_storm_risk": round(sum(all_storms) / len(all_storms), 2) if all_storms else 0.0,
-        "high_risk_waypoints": sum(1 for s in all_storms if s > 0.5),
-        "port_sequence": found_sequence,
+        "route_raw":             full_route_raw,
+        "route_smooth":          full_route_smooth,
+        "canal_jumps":           full_canal_jumps,
+        "travel_time_hours":     round(total_time, 2),
+        "num_waypoints_raw":     len(full_route_raw),
+        "num_waypoints_smooth":  len(full_route_smooth),
+        "max_storm_risk":        round(max(all_storms), 2)               if all_storms else 0.0,
+        "avg_storm_risk":        round(sum(all_storms) / len(all_storms), 2) if all_storms else 0.0,
+        "high_risk_waypoints":   sum(1 for s in all_storms if s > 0.5),
+        "port_sequence":         found_sequence,
     }
